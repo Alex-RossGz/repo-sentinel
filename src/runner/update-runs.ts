@@ -58,17 +58,31 @@ export const markRunDoneQuery = db.query(`
     created_at, started_at, finished_at
 `);
 
-export function claimNextPendingRun() {
+export type Run = {
+  id: number;
+  kind: string;
+  input_ref: string;
+  status: string;
+  stage: string | null;
+  findings_json: string | null;
+  decision_json: string | null;
+  error_text: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export function claimNextPendingRun(): Run | null {
   const row = claimNextPendingRunQuery.get();
   return row ? rowToApi(row) : null;
 }
 
-export function markRunFailed(runId: number, errorText: string) {
+export function markRunFailed(runId: number, errorText: string): Run | null {
   const row = markRunFailedQuery.get(runId, errorText);
   return row ? rowToApi(row) : null;
 }
 
-export function markRunStage(runId: number, stage: string) {
+export function markRunStage(runId: number, stage: string): Run | null {
   const row = markRunStageQuery.get(runId, stage);
   return row ? rowToApi(row) : null;
 }
@@ -77,7 +91,7 @@ export function markRunDone(
   runId: number,
   findings?: unknown,
   decision?: unknown
-) {
+): Run | null {
   const findingsJson = findings == null ? null : JSON.stringify(findings);
   const decisionJson = decision == null ? null : JSON.stringify(decision);
 

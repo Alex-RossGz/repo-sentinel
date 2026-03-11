@@ -1,3 +1,7 @@
+import { processDockerfile } from "./runner/process-dockerfile";
+import { processImage } from "./runner/process-image";
+import { processManifest } from "./runner/process-manifest";
+import { processRepoOrArchive } from "./runner/process-repo-or-archive";
 import { claimNextPendingRun, markRunDone, markRunFailed } from "./runner/update-runs";
 
 while (true) {
@@ -9,22 +13,22 @@ while (true) {
 
   try {
     switch (run.kind) {
-      /*       case "dockerfile":
-              await processDockerfile(run);
-              break;
-            case "image":
-              await processImage(run);
-              break;
-            case "repo":
-            case "archive":
-              await processRepoOrArchive(run);
-              break;
-            case "k8s_manifest":
-              await processK8sManifest(run);
-              break; */
+      case "dockerfile":
+        await processDockerfile(run);
+        break;
+      case "image":
+        await processImage(run);
+        break;
+      case "repo":
+      case "archive":
+        await processRepoOrArchive(run);
+        break;
+      case "k8s_manifest":
+        await processManifest(run);
+        break;
       default:
+        throw new Error(`Unknown run kind: ${run.kind}`);
     }
-    markRunDone(run.id);
   } catch (err) {
     markRunFailed(run.id, String(err));
   }
