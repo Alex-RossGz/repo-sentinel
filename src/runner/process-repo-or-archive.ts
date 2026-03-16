@@ -34,6 +34,9 @@ export async function processRepoOrArchive(run: Run) {
             throw new Error(`processRepoOrArchive received unsupported kind: ${run.kind}`);
         }
 
+        // prefix ./ and replace all backslashes with forward slashes to ensure Docker compatibility on Windows
+        scanTarget = "./" + scanTarget.split(join("")).join("/");
+
         await assertDirectoryHasFiles(scanTarget);
 
         const findings: Findings = {};
@@ -41,7 +44,7 @@ export async function processRepoOrArchive(run: Run) {
         findings["semgrep"] = await runSemgrep(scanTarget, run.id);
         findings["trivy"] = await runTrivyFs(scanTarget, run.id);
         findings["gitleaks"] = await runGitleaks(scanTarget, run.id);
-
+        findings["syft"] = await runSyft(scanTarget, run.id);
         return findings;
     } finally {
         try {
@@ -219,17 +222,20 @@ async function runGitleaks(scanTarget: string, runId: number) {
     const volumes = [
         {
             hostPath: scanTarget,
-            containerPath: "/repo",
+            containerPath: "/path",
         },
     ];
 
     const proc = dockerRun(
         [
             "detect",
-            "--source=/repo",
-            "--report-format=json",
-            "--report-path=/tmp/gitleaks-report.json",
-            "--no-git",
+            "--source=/path",
+            "--report-format",
+            "json",
+            "--report-path",
+            "-",
+            "--no-banner",
+            "--no-git", // disable built-in git scanning since we're mounting the filesystem directly
         ],
         "zricethezav/gitleaks:latest",
         volumes
@@ -267,4 +273,33 @@ async function runGitleaks(scanTarget: string, runId: number) {
     } catch {
         return [];
     }
+}
+
+// Run syft to get the sbom
+async function runSyft(scanTarget: string, runId: number) {
+    const volumes = [
+        {
+            hostPath: scanTarget,
+            containerPath: "/project",
+        },
+    ];
+
+    const proc = dockerRun(
+        ["-o", "cyclonedx-json", "/project"],
+        "anchore/syft:latest",
+        volumes
+    );
+    // docker run --rm -v ./:/project anchore/syft:latest -o cyclonedx-json /project
+
+    const outputText = await proc.stdout.text();
+    const exitCode = await proc.exited;
+
+    if (exitCode !== 0) {
+        const errText =
+            typeof proc.stderr === "string" ? proc.stderr : "Syft execution failed";
+        throw new Error(`Syft failed with exit code ${exitCode}: ${errText}`);
+    }
+
+    const parsed = JSON.parse(outputText);
+    return parsed;
 }
